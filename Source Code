@@ -1,0 +1,192 @@
+#include <SoftwareSerial.h>
+SoftwareSerial SIM900(11,12);
+#include <TinyGPS++.h>
+#include <Servo.h>  //include servo.h library
+Servo myservo;
+String SMS; 
+int pos = 0;    
+boolean fire = false;
+String long_lat;
+
+String Link; 
+
+#define Left 13      // left sensor
+#define Right 10// right sensor
+#define Forward 8   //front sensor
+
+#define LM1 7      // left motor
+#define LM2 6      // left motor
+#define RM1 5       // right motor
+#define RM2 4      // right motor
+#define pump 2
+TinyGPSPlus gps;
+
+static const uint32_t GPSBaud = 9600;
+
+double latitude = 13.168658;
+double longitude = 77.533889;
+
+int get_location(String message){
+  //    delay(500);
+    
+  SIM900.print("ATD +919019501968;\r");
+  delay(1000);
+
+  SIM900.print("AT+CMGF=1\r");     // AT command to set SIM900 to SMS mode
+  delay(100);
+  SIM900.print("AT+CNMI=2,2,0,0,0\r");       // Set module to send SMS data to serial out upon receipt
+  delay(100);
+    
+  SIM900.println("AT+CMGF=1"); // Replace x with mobile number
+  delay(1000);
+  SIM900.println("AT+CMGS= \"+919019501968\"\r"); // Replace * with mobile number  sim number - 8861273413
+  delay(1000); 
+  SIM900.println(message);// The SMS text you want to send
+  delay(100);
+  SIM900.println((char)26);// ASCII code of CTRL+Z
+  
+} 
+void GPS()
+{
+if (gps.charsProcessed() < 10)
+  {
+    //Serial.println("No GPS detected: check wiring.");
+     // Blynk.virtualWrite(V4, "GPS ERROR");         // Value Display widget  on V4 if GPS not detected
+  }
+}
+void displaygpsInfo()
+{ 
+
+  if (gps.location.isValid() ) 
+  {
+    
+     latitude = (gps.location.lat());      //Storing the Lat. and Lon. 
+     longitude = (gps.location.lng()); 
+    
+    Serial.print("LAT:  ");
+    Serial.println(latitude, 6);                // float to x decimal places
+    Serial.print("LONG: ");
+    Serial.println(longitude, 6); 
+  }
+    }
+    void locate()
+{
+  while (Serial.available() > 0) 
+    {
+      // sketch displays information every time a new sentence is correctly encoded.
+      if (gps.encode(Serial.read()))
+        displaygpsInfo();
+  }
+}
+void setup()
+{
+  SIM900.begin(9600);
+  Serial.begin(9600);
+  pinMode(Left, INPUT);
+  pinMode(Right, INPUT);
+  pinMode(Forward, INPUT);
+  pinMode(LM1, OUTPUT);
+  pinMode(LM2, OUTPUT);
+  pinMode(RM1, OUTPUT);
+  pinMode(RM2, OUTPUT);
+  pinMode(pump, OUTPUT);
+ 
+  myservo.attach(9);
+  myservo.write(90); 
+}
+ 
+void put_off_fire()
+{
+    delay (500);
+ 
+    digitalWrite(LM1, LOW);
+    digitalWrite(LM2, LOW);
+    digitalWrite(RM1, LOW);
+    digitalWrite(RM2, LOW);
+   Serial.println("Activating pump...");
+     delay(500);
+    
+    for (pos = 50; pos <= 130; pos += 1) { 
+    myservo.write(pos); 
+    delay(10);  
+  }
+  for (pos = 130; pos >= 50; pos -= 1) { 
+    myservo.write(pos); 
+    delay(10);
+  }
+  
+  
+  Serial.println("Pump off");
+  myservo.write(90);
+  
+  fire=false;
+}
+ 
+void loop()
+{
+   myservo.write(90); //Sweep_Servo();  
+ 
+    if (digitalRead(Left) ==1 && digitalRead(Right)==1 && digitalRead(Forward) ==1) 
+    {
+    digitalWrite(LM1, LOW);                                                                                          
+    digitalWrite(LM2, LOW);
+    digitalWrite(RM1, LOW);
+    digitalWrite(RM2, LOW);
+    digitalWrite(pump,LOW);
+    }
+    
+    else if (digitalRead(Forward) ==0) 
+    {
+    long_lat = String(float(latitude))+","+String(float(longitude));
+   Link = "https://www.google.com/maps/search/?api=1&query="+String(long_lat);
+   SMS = "Alert:Front side Fire detected "+ long_lat + " " + Link;//////////////////////////////SMS message
+   Serial.println(long_lat);
+   Serial.println("message sent");
+   get_location(SMS);   
+    digitalWrite(LM1, HIGH);
+    digitalWrite(LM2, LOW);
+    digitalWrite(RM1, LOW);
+    digitalWrite(RM2, HIGH);
+     digitalWrite(pump, HIGH);
+    fire = true;
+    }
+    
+    else if (digitalRead(Left) ==0)
+    {
+    long_lat = String(float(latitude))+","+String(float(longitude));
+   Link = "https://www.google.com/maps/search/?api=1&query="+String(long_lat);
+   SMS = "Alert:Left side Fire detected "+ long_lat + " " + Link;//////////////////////////////SMS message
+   Serial.println("message sent");
+   Serial.println(long_lat);
+    get_location(SMS); 
+    digitalWrite(LM1,LOW);
+    digitalWrite(LM2, HIGH);
+    digitalWrite(RM1, LOW);
+    digitalWrite(RM2, HIGH);
+     digitalWrite(pump, HIGH);
+    fire = true;
+    }
+    
+    else if (digitalRead(Right) ==0) 
+    {
+   long_lat = String(float(latitude))+","+String(float(longitude));
+   Link = "https://www.google.com/maps/search/?api=1&query="+String(long_lat);
+   SMS = "Alert:Right side Fire detected "+ long_lat + " " + Link;//////////////////////////////SMS message
+   Serial.println("message sent");
+   Serial.println(long_lat);
+    get_location(SMS);
+    digitalWrite(LM1,HIGH);
+    digitalWrite(LM2, LOW);
+    digitalWrite(RM1, HIGH);
+    digitalWrite(RM2, LOW);
+     digitalWrite(pump, HIGH);
+    fire = true;
+    }
+    
+delay(300);//change this value to increase the distance
+ 
+     while (fire == true)
+     {
+      put_off_fire();
+     }
+}
